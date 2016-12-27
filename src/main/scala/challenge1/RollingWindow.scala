@@ -2,7 +2,7 @@ package challenge1
 
 import java.nio.file.{Files, Paths}
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.immutable.Vector
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 import WindowConstants._
@@ -17,8 +17,10 @@ object RollingWindow {
    * @param exActives last round active price ratios
    * @return this round active price ratios. None if non.
    */
-  def processLine(line:String, exActives:Option[ListBuffer[PriceRatio]]): Option[ListBuffer[PriceRatio]] = {
-    val isALine = lineFormat.findAllIn(line).matchData.next()
+  def processLine(line:String, exActives:Option[Vector[PriceRatio]]): Option[Vector[PriceRatio]] = {
+    val isALine = lineFormat.findAllIn(line)
+      .matchData
+      .next()
       //extracting the timestamp
       val nowTry = Try(isALine.group(1).toLong) match {
         case Success(time) => Right(time)
@@ -35,12 +37,20 @@ object RollingWindow {
         case Right(now) =>
           priceRatioTry match {
             case Right(priceRatio) =>
-              val activeLines = exActives.getOrElse(ListBuffer[PriceRatio]())
+              val activeLines = exActives.getOrElse(Vector[PriceRatio]())
               val actives = (activeLines :+ PriceRatio(now, decimalFormatter.format(priceRatio).toDouble))
-                .filter(_.time >= now - windowLength)
-              val ratios = actives.map(_.ratio)
-              println(s"$now  $priceRatio  ${"%-2s".format(actives.size)}  ${"%-8s".format(decimalFormatter.format(ratios.sum))}  ${ratios.min}  ${ratios.max}")
+              val values = actives.foldLeft((0, 0.0, Double.MaxValue, 0.0)){ (acc,thisRatio) =>
+                if (thisRatio.time >= now - windowLength) {
+                  val min = Math.min(acc._3, thisRatio.ratio)
+                  val max = Math.max(acc._4, thisRatio.ratio)
+                  val sum = acc._2 + thisRatio.ratio
+                  (acc._1+1,sum,min,max)
+                } else {
+                  acc
+                }
 
+              }
+              println(s"$now  $priceRatio  ${"%-2s".format(values._1)} ${"%-8s".format(decimalFormatter.format(values._2))}  ${values._3}  ${values._4}")
               Some(actives)
             case Left(message) =>
               println(message)
@@ -58,7 +68,7 @@ object RollingWindow {
    * @param actives active prices ratio (in last window). None if non price ratio was active.
    * @return iterator and last active elements.
    */
-  def processLines(it:Iterator[String], actives:Option[ListBuffer[PriceRatio]]): (Iterator[String],Option[ListBuffer[PriceRatio]]) = {
+  def processLines(it:Iterator[String], actives:Option[Vector[PriceRatio]]): (Iterator[String], Option[List[PriceRatio]]) = {
     if (it.hasNext) {
       val line = it.next()
       processLines(it, processLine(line, actives))
@@ -97,7 +107,8 @@ object RollingWindow {
     //first argument is the path, I don't care about the other args
     val maybePath = Try(args.head) match {
       case Success(pathToFile:String) =>
-        if (Files.exists(Paths.get(pathToFile))) Right(pathToFile) else Left(pathToFile+fileIsNotThereMessage)
+        if (Files.exists(Paths.get(pathToFile))) Right(pathToFile)
+        else Left(pathToFile+fileIsNotThereMessage)
       case Failure(ex) => Left(usageMessage)
     }
     //process file
