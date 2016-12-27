@@ -10,6 +10,7 @@ import WindowConstants._
 object RollingWindow {
 
   case class PriceRatio(time:Long, ratio: Double)
+  case class Values(size:Int, sum:Double, min:Double, max:Double)
 
   /**
    * Process one line of the file. Checks if match the format, and calculate everything for the active window. And prints it.
@@ -38,19 +39,31 @@ object RollingWindow {
           priceRatioTry match {
             case Right(priceRatio) =>
               val activeLines = exActives.getOrElse(Vector[PriceRatio]())
-              val actives = (activeLines :+ PriceRatio(now, decimalFormatter.format(priceRatio).toDouble))
-              val values = actives.foldLeft((0, 0.0, Double.MaxValue, 0.0)){ (acc,thisRatio) =>
-                if (thisRatio.time >= now - windowLength) {
-                  val min = Math.min(acc._3, thisRatio.ratio)
-                  val max = Math.max(acc._4, thisRatio.ratio)
-                  val sum = acc._2 + thisRatio.ratio
-                  (acc._1+1,sum,min,max)
-                } else {
-                  acc
-                }
+              val actives = activeLines :+ PriceRatio(now, decimalFormatter.format(priceRatio).toDouble)
 
+              /**
+               * Calculate the values (size, sum, min and max) for the active window.
+               * @param acc accumulative values
+               * @param thisActives active values left to check
+               * @return values for the active window
+               */
+              def calculateValues(acc:Values, thisActives:Vector[PriceRatio]): Values = {
+                if (thisActives.isEmpty){
+                  acc
+                } else if (thisActives.head.time < (now-windowLength)) {
+                  calculateValues(acc, thisActives.tail)
+                } else {
+                  val thisRatio = thisActives.head
+                  val min = Math.min(acc.min, thisRatio.ratio)
+                  val max = Math.max(acc.max, thisRatio.ratio)
+                  val sum = acc.sum + thisRatio.ratio
+                  calculateValues(Values(acc.size+1,sum,min,max), thisActives.tail )
+                }
               }
-              println(s"$now  $priceRatio  ${"%-2s".format(values._1)} ${"%-8s".format(decimalFormatter.format(values._2))}  ${values._3}  ${values._4}")
+
+              val values = calculateValues(Values(0, 0.0, Double.MaxValue, 0.0), actives)
+
+              println(s"$now  $priceRatio  ${"%-2s".format(values.size)} ${"%-8s".format(decimalFormatter.format(values.sum))}  ${values.min}  ${values.max}")
               Some(actives)
             case Left(message) =>
               println(message)
