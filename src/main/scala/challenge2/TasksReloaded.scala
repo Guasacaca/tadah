@@ -2,12 +2,12 @@ package challenge2
 
 import java.nio.file.{Paths, Files}
 
-import TasksConstants._
+import challenge2.TasksConstants._
+
 import scala.io.Source
-import challenge2.Network._
 import scala.util.{Failure, Success, Try}
 
-object Tasks {
+object TasksReloaded {
 
   case class Node(name:String, operation:Operation)
 
@@ -19,7 +19,7 @@ object Tasks {
    * @param root root task
    * @return tasks and links updates
    */
-  def processLine(it:Iterator[String], tasks:Map[String, Node], links:Map[Node, Vector[Node]], root:Option[Node]): (Map[String, Node], Map[Node, Vector[Node]]) = {
+  def processLine(it:Iterator[String], tasks:Map[String, Node], links:Map[Node, Vector[(Node, Int)]], root:Option[Node], lastLink:Int): (Map[String, Node], Map[Node, Vector[(Node, Int)]]) = {
     if (it.hasNext){
       //this iteration line
       val line = it.next()
@@ -54,7 +54,7 @@ object Tasks {
         //first task -> first Node! (root)
         val first:Node = root.getOrElse(node)
         val newTasks:Map[String, Node] = tasks + (name -> node)
-        processLine(it, newTasks, links, Some(first) )
+        processLine(it, newTasks, links, Some(first) , lastLink)
 
       } //it's a link
       else if (linkIt.hasNext) {
@@ -66,12 +66,12 @@ object Tasks {
         //both should already exist
         if (theNode1.isDefined && theNode2.isDefined) {
 
-          val nodesList:Vector[Node] = links.getOrElse(theNode1.get, Vector[Node]()) :+ theNode2.get
-          val newLinks:Map[Node, Vector[Node]] = links + (theNode1.get -> nodesList)
-          processLine(it, tasks, newLinks, root)
+          val nodesList:Vector[(Node, Int)] = links.getOrElse(theNode1.get, Vector[(Node,Int)]()) :+ (theNode2.get, lastLink+1)
+          val newLinks:Map[Node, Vector[(Node, Int)]] = links + (theNode1.get -> nodesList)
+          processLine(it, tasks, newLinks, root, lastLink+1)
         } else {
           //else, ignore link
-          processLine(it, tasks, links, root)
+          processLine(it, tasks, links, root, lastLink)
         }
         //it's a process
       } else if (processIt.hasNext){
@@ -80,23 +80,23 @@ object Tasks {
         if (root.isDefined){
           val numberDelays = tasks.values
             .map(x =>
-              x.operation match {
-                case op:Delay => (x,1)
-                case _ => (x,0)
-              }
+            x.operation match {
+              case op:Delay => (x,1)
+              case _ => (x,0)
+            }
             )
             .count(_._2==1)
-          executePipeline(root.get, words ++ List.fill(numberDelays)(""), links)
+          NetworkReloaded.executePipeline(root.get, words ++ List.fill(numberDelays)(""), links)
           //reset delays!
           resetDelay(tasks)
           println()
 
         }
         //else ignore process.
-        processLine(it, tasks, links, root)
+        processLine(it, tasks, links, root, lastLink)
       } else {
         //ignore that line if doesn't match anything
-        processLine(it, tasks, links, root)
+        processLine(it, tasks, links, root, lastLink)
       }
     } else {
       (tasks,links)
@@ -110,9 +110,9 @@ object Tasks {
   def resetDelay(tasks:Map[String, Node]):Unit = {
     tasks
       .foreach{x => x._2.operation match {
-        case op:Delay => op.reset()
-        case _ =>
-      }
+      case op:Delay => op.reset()
+      case _ =>
+    }
     }
   }
 
@@ -123,7 +123,7 @@ object Tasks {
   def processFile(path:String): Unit ={
     require(Files.exists(Paths.get(path)), fileIsNotThereMessage)
     val lines = Source.fromFile(path).getLines()
-    processLine(lines, Map[String, Node](), Map[Node, Vector[Node]](), None )
+    processLine(lines, Map[String, Node](), Map[Node, Vector[(Node, Int)]](), None ,0)
   }
 
   def main (args: Array[String]) {
@@ -139,4 +139,5 @@ object Tasks {
       case Left(errorMessage) => println(errorMessage)
     }
   }
+
 }
