@@ -12,7 +12,8 @@ In the future: window size (T = 60 by default) could be passed through arguments
 
 Usage in sbt: run \<filename>
 
-The Main class is in Tasks
+The Main class is in Tasks.
+
 Assumptions made:
 
 1. Links that don't have defined the tasks/nodes related to them, BEFORE the respective link creation, will be ignored.
